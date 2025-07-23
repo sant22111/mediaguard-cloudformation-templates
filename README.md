@@ -1,0 +1,1 @@
+# mediaguard-cloudformation-templates
