@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'MediaGuard AI TrustShield - S3 Access Role Template'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "MediaGuard Access Configuration"
+        Parameters:
+          - MediaGuardAccountId
+          - ExternalId
+      - Label:
+          default: "S3 Bucket Configuration"
+        Parameters:
+          - BucketName
+          - BucketPrefix
+          - BucketRegion
+    ParameterLabels:
+      MediaGuardAccountId:
+        default: "MediaGuard AWS Account ID"
+      ExternalId:
+        default: "External ID"
+      BucketName:
+        default: "S3 Bucket Name"
+      BucketPrefix:
+        default: "S3 Bucket Prefix (Optional)"
+      BucketRegion:
+        default: "S3 Bucket Region"
+
+Parameters:
+  MediaGuardAccountId:
+    Type: String
+    Default: "123456789012"  # For testing, this will be replaced with your own account ID
+    Description: "MediaGuard's AWS Account ID (pre-filled, do not change)"
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: "Must be a valid 12-digit AWS account ID"
+  
+  ExternalId:
+    Type: String
+    Default: "mediaguard-access"  # Replace with actual external ID or generate dynamically
+    Description: "Security identifier provided by MediaGuard (pre-filled, do not change)"
+  
+  BucketName:
+    Type: String
+    Description: "Name of your S3 bucket containing media content"
+    AllowedPattern: "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    ConstraintDescription: "Bucket name must be between 3 and 63 characters, start and end with a lowercase letter or number, and can contain lowercase letters, numbers, periods, and hyphens"
+  
+  BucketPrefix:
+    Type: String
+    Default: ""
+    Description: "Optional folder path prefix to restrict access (e.g., 'media/' or 'content/2025/'). Leave empty for access to entire bucket."
+  
+  BucketRegion:
+    Type: String
+    Default: "us-east-1"
+    Description: "AWS Region where your S3 bucket is located"
+    AllowedValues:
+      - "us-east-1"
+      - "us-east-2"
+      - "us-west-1"
+      - "us-west-2"
+      - "ca-central-1"
+      - "eu-west-1"
+      - "eu-west-2"
+      - "eu-central-1"
+      - "ap-southeast-1"
+      - "ap-southeast-2"
+      - "ap-northeast-1"
+      - "ap-northeast-2"
+      - "ap-south-1"
+      - "sa-east-1"
+
+Conditions:
+  HasPrefix: !Not [!Equals [!Ref BucketPrefix, ""]]
+
+Resources:
+  MediaGuardAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "MediaGuardAccessRole-${AWS::StackName}"
+      Description: "Role allowing MediaGuard AI TrustShield to access content in your S3 bucket"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${MediaGuardAccountId}:root"
+            Action: "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                "sts:ExternalId": !Ref ExternalId
+      Policies:
+        - PolicyName: "MediaGuardS3ReadAccess"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                Resource:
+                  - !Sub "arn:aws:s3:::${BucketName}"
+                  - !If
+                    - HasPrefix
+                    - !Sub "arn:aws:s3:::${BucketName}/${BucketPrefix}*"
+                    - !Sub "arn:aws:s3:::${BucketName}/*"
+      Tags:
+        - Key: "Purpose"
+          Value: "MediaGuard AI TrustShield Integration"
+        - Key: "CreatedBy"
+          Value: "CloudFormation"
+        - Key: "Service"
+          Value: "Attribution Chain"
+
+Outputs:
+  RoleARN:
+    Description: "The ARN of the IAM Role that MediaGuard should use to access your S3 bucket"
+    Value: !GetAtt MediaGuardAccessRole.Arn
+  
+  BucketName:
+    Description: "Your S3 bucket name"
+    Value: !Ref BucketName
+  
+  BucketPrefix:
+    Description: "Your S3 bucket prefix (if specified)"
+    Value: !If [HasPrefix, !Ref BucketPrefix, "No prefix (full bucket access)"]
+  
+  BucketRegion:
+    Description: "Your S3 bucket region"
+    Value: !Ref BucketRegion
+  
+  ExternalId:
+    Description: "The External ID used for enhanced security"
+    Value: !Ref ExternalId
+  
+  NextSteps:
+    Description: "Next steps to complete the integration"
+    Value: !Sub "IMPORTANT: After stack creation, please provide the following information to MediaGuard to complete the integration:\n1. Role ARN: ${MediaGuardAccessRole.Arn}\n2. Bucket Name: ${BucketName}\n3. Bucket Prefix: ${BucketPrefix}\n4. Bucket Region: ${BucketRegion}\n5. External ID: ${ExternalId}"
